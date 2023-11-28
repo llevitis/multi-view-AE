@@ -238,6 +238,9 @@ class ConditionalVariationalEncoder(Encoder):
     def set_labels(self, labels):
         self.labels = labels 
 
+    def set_classifier_labels(self, classifier_labels):
+        self.classifier_labels = classifier_labels
+
     def forward(self, x):
         c = F.one_hot(self.labels, self.num_cat)
         x_cond = torch.hstack((x, c))    

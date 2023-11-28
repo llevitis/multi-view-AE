@@ -18,10 +18,11 @@ class MVDataset(Dataset):
         return_index (bool): Whether to return batch index labels.
         transform (torchvision.transforms): Torchvision transformation to apply to the data. Default is None.
     """
-    def __init__(self, data, n_views, labels=None, return_index=False, transform=None):
+    def __init__(self, data, n_views, labels=None, classifier_labels=None, return_index=False, transform=None):
 
         self.data = data
         self.labels = labels
+        self.classifier_labels = classifier_labels
         self.n_views = n_views
         self.return_index = return_index
         self.transform = transform
@@ -37,6 +38,8 @@ class MVDataset(Dataset):
 
         if labels is not None:
             self.labels = torch.from_numpy(self.labels).long()
+        if classifier_labels is not None: 
+            self.classifier_labels = torch.from_numpy(self.classifier_labels).long()
 
     def __getitem__(self, index):
 
@@ -51,6 +54,10 @@ class MVDataset(Dataset):
 
         if self.labels is not None:
             return x, self.labels[index]
+    
+        if self.classifier_labels is not None:
+            return x, self.classifier_labels[index]
+        
         return x
 
     def __len__(self):

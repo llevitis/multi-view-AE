@@ -105,7 +105,8 @@ class BaseModelAE(ABC, pl.LightningModule):
         self.save_hyperparameters()
 
     ################################            public methods
-    def fit(self, *data, labels=None, max_epochs=None, batch_size=None, cfg=None):
+    def fit(self, *data, classifier_labels=None, labels=None, max_epochs=None, batch_size=None, cfg=None):
+        print(classifier_labels)
         if cfg is not None:
             new_cfg = omegaconf.OmegaConf.load(cfg)
             self.__initcfg(self.cfg, new_cfg, at_fit=True)
@@ -145,6 +146,11 @@ class BaseModelAE(ABC, pl.LightningModule):
         else:
             self.batch_size = self.cfg.datamodule.batch_size
 
+        if classifier_labels is not None: 
+            self.classifier_labels = classifier_labels
+        else: 
+            self.classifier_labels = None
+
         callbacks = []
         if self.cfg.datamodule.is_validate:
             for _, cb_conf in self.cfg.callbacks.items():
@@ -157,7 +163,7 @@ class BaseModelAE(ABC, pl.LightningModule):
         )
 
         datamodule = hydra.utils.instantiate(
-           self.cfg.datamodule, data=data, n_views=self.n_views, labels=labels, _convert_="all", _recursive_=False
+           self.cfg.datamodule, data=data, classifier_labels=classifier_labels, n_views=self.n_views, labels=labels, _convert_="all", _recursive_=False
         )
         py_trainer.fit(self, datamodule)
         
@@ -270,11 +276,19 @@ class BaseModelAE(ABC, pl.LightningModule):
             self.prior = hydra.utils.instantiate(self.cfg.prior)
 
     def _unpack_batch(self, batch): # dataset returned other vars than x, need to unpack
+        print(batch)
         if isinstance(batch[0], list): 
             batch_x, batch_y, *other = batch
         else: 
             batch_x, batch_y, other = batch, None, None
         return batch_x, batch_y, other 
+    
+
+    ### COME BACK TO THIS #####
+    def _set_batch_classifier_labels(self, classifier_labels): 
+        if classifier_labels is not None: 
+            self.classifier_labels = classifier_labels
+        
 
     def _set_batch_labels(self, labels): # for passing labels to encoder/decoder
         for i in range(len(self.encoders)):
@@ -441,11 +455,12 @@ class BaseModelAE(ABC, pl.LightningModule):
         return cfg
 
     def __step(self, batch, batch_idx, stage):
+        print(batch)
         batch_x, batch_y, other = self._unpack_batch(batch)
         self._set_batch_labels(batch_y)
-                
+        self._set_batch_classifier_labels(batch_y)
         fwd_return = self.forward(batch_x)
-        loss = self.loss_function(batch_x, fwd_return)
+        loss = self.loss_function(batch_x, batch_y, fwd_return)
         for loss_n, loss_val in loss.items():
             self.log(
                 f"{stage}_{loss_n}", loss_val, on_epoch=True, prog_bar=True, logger=True
@@ -489,9 +504,9 @@ class BaseModelAE(ABC, pl.LightningModule):
         with torch.no_grad():
             z_ = None
             for batch_idx, local_batch in enumerate(generator):
-                local_batchx, local_batchy, _ = self._unpack_batch(local_batch)
+                local_batchx, local_batchy, local_batchz, _ = self._unpack_batch(local_batch)
                 self._set_batch_labels(local_batchy)
-
+                self._set_batch_classifier_labels(local_batchz)
                 local_batchx = [
                     local_batchx_.to(self.device) for local_batchx_ in local_batchx
                 ]

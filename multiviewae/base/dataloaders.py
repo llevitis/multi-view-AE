@@ -23,6 +23,7 @@ class MultiviewDataModule(pl.LightningDataModule):
             train_size,
             dataset,
             data,
+            classifier_labels,
             labels
         ):
 
@@ -32,6 +33,7 @@ class MultiviewDataModule(pl.LightningDataModule):
         self.is_validate = is_validate
         self.train_size = train_size
         self.data = data  
+        self.classifier_labels = classifier_labels
         self.labels = labels 
         self.dataset = dataset
         if not isinstance(self.batch_size, int):
@@ -39,11 +41,11 @@ class MultiviewDataModule(pl.LightningDataModule):
 
     def setup(self, stage):
         if self.is_validate:
-            train_data, test_data, train_labels, test_labels = self.train_test_split()
-            self.train_dataset = hydra.utils.instantiate(self.dataset, data=train_data, labels=train_labels, n_views=self.n_views)
-            self.test_dataset = hydra.utils.instantiate(self.dataset, data=test_data, labels=test_labels, n_views=self.n_views)
+            train_data, test_data, train_labels, test_labels, train_classifier_labels, test_classifier_labels = self.train_test_split()
+            self.train_dataset = hydra.utils.instantiate(self.dataset, data=train_data, labels=train_labels, classifier_labels=train_classifier_labels, n_views=self.n_views)
+            self.test_dataset = hydra.utils.instantiate(self.dataset, data=test_data, labels=test_labels, classifier_labels=test_classifier_labels, n_views=self.n_views)
         else:
-            self.train_dataset = hydra.utils.instantiate(self.dataset, data=self.data, labels=self.labels, n_views=self.n_views) 
+            self.train_dataset = hydra.utils.instantiate(self.dataset, data=self.data, labels=self.labels, classifier_labels=self.classifier_labels, n_views=self.n_views) 
             self.test_dataset = None
         del self.data
 
@@ -65,7 +67,13 @@ class MultiviewDataModule(pl.LightningDataModule):
             train_labels = self.labels[train_idx]
             test_labels = self.labels[test_idx]
 
-        return train_data, test_data, train_labels, test_labels
+        train_classifier_labels = None
+        test_classifier_labels = None
+        if self.classifier_labels is not None:
+            train_classifier_labels = self.classifier_labels[train_idx]
+            test_classifier_labels = self.classifier_labels[test_idx]
+
+        return train_data, test_data, train_labels, test_labels, train_classifier_labels, test_classifier_labels
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=0) #use default num_workers for now, problem in windows! 

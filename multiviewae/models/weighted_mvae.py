@@ -41,7 +41,8 @@ class weighted_mVAE(BaseModelVAE):
         super().__init__(model_name=MODEL_WEIGHTEDMVAE,
                         cfg=cfg,
                         input_dim=input_dim,
-                        z_dim=z_dim)
+                        z_dim=z_dim
+ )
 
         self.join_z = weightedProductOfExperts()
         #check if self.private is attribute, if not set to False
@@ -169,6 +170,51 @@ class weighted_mVAE(BaseModelVAE):
             px_zs = self.decode(qz_x)
             fwd_rtn = {"px_zs": px_zs, "qz_x": qz_x}
         return fwd_rtn
+    
+
+    def build_psychopathology_classifier(self, fwd_rtn):
+
+        qcs_xs = fwd_rtn["qcs_xs"]
+        # Sample from each Normal distribution
+        samples = [dist._sample(training=self._training) for dist in qcs_xs]
+
+        # Concatenate the samples along the specified dimension (dim=1)
+        qcs_xs_concat = torch.cat(samples, dim=1)
+
+        len_qcs_xs = qcs_xs_concat.shape[1]
+        print(len_qcs_xs)
+        
+        model = torch.nn.Sequential(
+                    torch.nn.Linear(len_qcs_xs, 64),
+                    torch.nn.ReLU(),
+                    torch.nn.BatchNorm1d(64),
+                    torch.nn.Linear(64, 32),
+                    torch.nn.ReLU(),
+                    torch.nn.BatchNorm1d(32),
+                    torch.nn.Linear(32, 1),
+                    torch.nn.Sigmoid()
+                )
+        
+        classifier_output = model(qcs_xs_concat)
+
+        return classifier_output
+    
+    def calc_loss_classifier_(self, classifier_output, x):
+        r"""Calculate loss from predicting binary outcome for psychopathology status.
+
+        Args:
+            classifier_output (list): list of input data of type torch.Tensor.
+            pxs_zs (list): nested list of decoding distributons. NOTE: The ordering of decoding distribution is the reverse compared to other models.
+
+        Returns:
+            ll (torch.Tensor): Log-likelihood loss.
+        """
+
+        loss_fn = torch.nn.BCEWithLogitsLoss()  # Use BCEWithLogitsLoss for binary classification
+        classifier_output_float = classifier_output.float()
+        target_float = x.float()
+        classifier_loss = loss_fn(classifier_output_float.squeeze(), target_float)
+        return classifier_loss
 
     def calc_kl(self, qz_x):
         r"""Calculate KL-divergence loss.
@@ -211,7 +257,7 @@ class weighted_mVAE(BaseModelVAE):
             ll += px_zs[0][i].log_likelihood(x[i]).mean(0).sum() #first index is latent, second index is view
         return ll/self.n_views
 
-    def loss_function(self, x, fwd_rtn):
+    def loss_function(self, x, classifier_labels, fwd_rtn):
         r"""Calculate Multimodal VAE loss.
         
         Args:
@@ -222,19 +268,22 @@ class weighted_mVAE(BaseModelVAE):
             losses (dict): dictionary containing each element of the MVAE loss.
         """
         px_zs = fwd_rtn["px_zs"]
+        classifier_labels = self.classifier_labels
         ll = self.calc_ll(x, px_zs)
         if self.private:
             qs_xs = fwd_rtn["qs_xs"]
             qc_x = fwd_rtn["qc_x"]
             kl = self.calc_kl_separate(qs_xs) #calc kl for private latents
             kl += self.calc_kl(qc_x) #calc kl for shared latents
-            total = kl - ll
-            losses = {"loss": total, "kl": kl, "ll": ll}
+            classifier_output = self.build_psychopathology_classifier(fwd_rtn)
+            classifier_loss = self.calc_loss_classifier_(classifier_output, classifier_labels)
+            total = kl - ll + 0.25*classifier_loss
+            losses = {"loss": total, "kl": kl, "ll": ll, "classifier_loss": classifier_loss}
             return losses
         else:
             qz_x = fwd_rtn["qz_x"]
             kl = self.calc_kl(qz_x)
             total = kl - ll
-            losses = {"loss": total, "kl": kl, "ll": ll}
+            losses = {"loss": total, "kl": kl, "ll": ll, "classifier_loss": classifier_loss}
             return losses
 
