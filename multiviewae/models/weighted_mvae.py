@@ -182,7 +182,6 @@ class weighted_mVAE(BaseModelVAE):
         qcs_xs_concat = torch.cat(samples, dim=1)
 
         len_qcs_xs = qcs_xs_concat.shape[1]
-        print(len_qcs_xs)
         
         model = torch.nn.Sequential(
                     torch.nn.Linear(len_qcs_xs, 64),

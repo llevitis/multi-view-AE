@@ -106,7 +106,6 @@ class BaseModelAE(ABC, pl.LightningModule):
 
     ################################            public methods
     def fit(self, *data, classifier_labels=None, labels=None, max_epochs=None, batch_size=None, cfg=None):
-        print(classifier_labels)
         if cfg is not None:
             new_cfg = omegaconf.OmegaConf.load(cfg)
             self.__initcfg(self.cfg, new_cfg, at_fit=True)
@@ -276,7 +275,6 @@ class BaseModelAE(ABC, pl.LightningModule):
             self.prior = hydra.utils.instantiate(self.cfg.prior)
 
     def _unpack_batch(self, batch): # dataset returned other vars than x, need to unpack
-        print(batch)
         if isinstance(batch[0], list): 
             batch_x, batch_y, *other = batch
         else: 
