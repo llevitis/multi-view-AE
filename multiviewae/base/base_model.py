@@ -502,9 +502,9 @@ class BaseModelAE(ABC, pl.LightningModule):
         with torch.no_grad():
             z_ = None
             for batch_idx, local_batch in enumerate(generator):
-                local_batchx, local_batchy, local_batchz, _ = self._unpack_batch(local_batch)
+                local_batchx, local_batchy, _ = self._unpack_batch(local_batch)
                 self._set_batch_labels(local_batchy)
-                self._set_batch_classifier_labels(local_batchz)
+                self._set_batch_classifier_labels(local_batchy)
                 local_batchx = [
                     local_batchx_.to(self.device) for local_batchx_ in local_batchx
                 ]
